@@ -542,7 +542,7 @@ function listaCalendari_() {
   let tz = null;
   let token = null;
   do {
-    const p = { minAccessRole: 'reader', showHidden: false, maxResults: 250 };
+    const p = { minAccessRole: 'freeBusyReader', showHidden: false, maxResults: 250 };
     if (token) p.pageToken = token;
     const res = retry_(function () { return Calendar.CalendarList.list(p); });
     (res.items || []).forEach(function (c) {
@@ -553,6 +553,8 @@ function listaCalendari_() {
         id: c.id,
         name: (c.summaryOverride || c.summary || c.id),
         primary: !!c.primary,
+        // "readable": si vedono i dettagli degli eventi (serve per usarlo come origine)
+        readable: ['owner', 'writer', 'reader'].indexOf(c.accessRole) !== -1,
         writable: c.accessRole === 'owner' || c.accessRole === 'writer'
       });
     });

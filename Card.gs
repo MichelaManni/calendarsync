@@ -35,7 +35,9 @@ function buildHome_(bozza) {
     .setName('home')
     .setHeader(CardService.newCardHeader().setTitle('Calendar Sync'))
     .addSection(sezioneStato_(salvato, lista.tz, nomi))
-    .addSection(sezioneScelta_(cfg, lista.items))
+    .addSection(sezioneScelta_(cfg,
+      lista.items.filter(function (c) { return c.readable; }),
+      lista.items.filter(function (c) { return !c.readable; })))
     .addSection(sezioneOpzioni_(cfg, salvato))
     .addSection(sezionePulsanti_(salvato))
     .build();
@@ -76,7 +78,7 @@ function descrizione_(cfg, nomi) {
   return 'Da ' + nome + ' verso ' + altri + (altri === 1 ? ' calendario.' : ' calendari.');
 }
 
-function sezioneScelta_(cfg, tutti) {
+function sezioneScelta_(cfg, tutti, limitati) {
   const scrivibili = tutti.filter(function (c) { return c.writable; });
   const sezione = CardService.newCardSection();
 
@@ -106,6 +108,14 @@ function sezioneScelta_(cfg, tutti) {
       dest.addItem(c.name, c.id, cfg.calendars.indexOf(c.id) !== -1);
     });
     sezione.addWidget(dest);
+  }
+
+  if (limitati && limitati.length) {
+    // Calendari visibili in Google Calendar ma condivisi solo come libero/occupato
+    const nomi = limitati.map(function (c) { return escapeHtml_(c.name); }).join(', ');
+    sezione.addWidget(CardService.newTextParagraph().setText(
+      'Non posso usare <b>' + nomi + '</b>: è condiviso solo come libero/occupato. ' +
+      'Chiedi il permesso “Visualizza tutti i dettagli degli eventi” (o “Apporta modifiche agli eventi”).'));
   }
 
   sezione.addWidget(CardService.newSelectionInput()
