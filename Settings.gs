@@ -18,7 +18,6 @@ const DEFAULTS_ = {
   skipKeywords: ['#nosync', '#privato'], // se presenti nel titolo/descrizione, evento non copiato
   daysBehind: 1,                         // giorni nel passato da considerare
   daysAhead: 60,                         // giorni nel futuro da considerare
-  colorId: '8',                          // 8 = grafite; '' = colore predefinito
   active: false                          // sincronizzazione attiva o in pausa
 };
 

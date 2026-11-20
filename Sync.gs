@@ -220,9 +220,10 @@ function rispecchia_(srcId, dstId, dati, cfg, stats, deadline) {
     } else {
       if (cambiato_(mirror, nuovo)) {
         if (scaduto_(deadline)) return false;
-        if (tipoDiverso_(mirror, nuovo)) {
+        if (tipoDiverso_(mirror, nuovo) || mirror.colorId) {
           // Il tipo di un evento non si puo' cambiare (es. vecchio "Occupato" che ora
-          // deve essere un vero "Fuori sede"): si elimina e si ricrea.
+          // deve essere un vero "Fuori sede"): si elimina e si ricrea. Lo stesso per i
+          // vecchi blocchi con un colore fisso, cosi' tornano al colore del calendario.
           elimina_(dstId, mirror.id);
           creaBlocco_(src, srcId, dstId, cfg, nuovo);
         } else {
@@ -306,7 +307,6 @@ function corpo_(src, srcId, dstId, cfg) {
     // Con il nome vero il blocco deve essere leggibile da chi vede il calendario,
     // quindi non lo rendiamo privato; con "Occupato" resta privato.
     if (!nome) body.visibility = 'private';
-    if (cfg.colorId) body.colorId = cfg.colorId;
   }
 
   if (src.start.date) {
@@ -330,6 +330,7 @@ function mostraNome_(src, cfg) {
 
 function cambiato_(mirror, body) {
   return tipoDiverso_(mirror, body) ||
+    !!mirror.colorId ||
     mirror.summary !== body.summary ||
     (mirror.visibility || 'default') !== (body.visibility || 'default') ||
     !stessoOrario_(mirror.start, body.start) ||
