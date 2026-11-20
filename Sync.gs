@@ -404,12 +404,24 @@ function voglioOOO_(src, dstId) {
   return accettaOOO_(dstId);
 }
 
-/** Il "Fuori sede" ev e' gia' coperto da uno dei "Fuori sede" reali della destinazione? */
+/**
+ * L'evento ev e' interamente coperto dai "Fuori sede" reali della destinazione?
+ * I "Fuori sede" consecutivi o sovrapposti vengono uniti: due giorni separati
+ * (23 e 24) coprono un unico intervallo occupato dal 23 al 25.
+ */
 function copertoDa_(ev, fuoriSede) {
   const s = ms_(ev.start), e = ms_(ev.end);
-  return fuoriSede.some(function (d) {
-    return ms_(d.start) <= s && ms_(d.end) >= e;
-  });
+  if (isNaN(s) || isNaN(e)) return false;
+  const intervalli = fuoriSede
+    .map(function (d) { return [ms_(d.start), ms_(d.end)]; })
+    .filter(function (x) { return !isNaN(x[0]) && !isNaN(x[1]); })
+    .sort(function (a, b) { return a[0] - b[0]; });
+  let coperto = s;   // fin dove l'evento risulta gia' coperto
+  for (let i = 0; i < intervalli.length && coperto < e; i++) {
+    if (intervalli[i][0] > coperto) break;   // buco scoperto: essendo ordinati, nessuno dopo lo chiude
+    if (intervalli[i][1] > coperto) coperto = intervalli[i][1];
+  }
+  return coperto >= e;
 }
 
 function ms_(t) {
