@@ -132,12 +132,39 @@ function pulisciEstranei_(coppie, cfg, dati, stats, deadline) {
 function caricaTutti_(ids, win) {
   const dati = {};
   ids.forEach(function (id) {
-    dati[id] = listAll_(id, {
-      timeMin: win.min, timeMax: win.max,
-      singleEvents: true, showDeleted: false, maxResults: 250
-    });
+    dati[id] = (ruolo_(id) === 'freeBusyReader')
+      ? eventiDaLiberoOccupato_(id, win)
+      : listAll_(id, {
+        timeMin: win.min, timeMax: win.max,
+        singleEvents: true, showDeleted: false, maxResults: 250
+      });
   });
   return dati;
+}
+
+/**
+ * Calendario condiviso solo come "libero/occupato": non ci sono eventi leggibili,
+ * ma Google fornisce gli intervalli occupati. Li trasformiamo in eventi sintetici
+ * (senza titolo) con un identificativo ricavato da inizio e fine: se l'intervallo
+ * cambia, il vecchio blocco sparisce e ne nasce uno nuovo.
+ */
+function eventiDaLiberoOccupato_(calId, win) {
+  const res = retry_(function () {
+    return Calendar.Freebusy.query({ timeMin: win.min, timeMax: win.max, items: [{ id: calId }] });
+  });
+  const c = res.calendars && res.calendars[calId];
+  if (!c) throw new Error('Non riesco a leggere gli orari di ' + calId + '.');
+  if (c.errors && c.errors.length) {
+    // Si ferma qui: meglio non toccare nulla che cancellare blocchi validi per un errore passeggero
+    throw new Error('Non riesco a leggere gli orari di ' + calId + ' (' + c.errors[0].reason + ').');
+  }
+  return (c.busy || []).map(function (b) {
+    const id = 'fb:' + b.start + '|' + b.end;
+    return {
+      id: id, iCalUID: id, status: 'confirmed', summary: '', eventType: 'default',
+      transparency: 'opaque', start: { dateTime: b.start }, end: { dateTime: b.end }
+    };
+  });
 }
 
 /**
@@ -511,26 +538,32 @@ function retry_(fn) {
  *  - calendario di origine in 'oneway': basta poter vedere i dettagli degli eventi
  */
 function verificaAccessi_(cfg) {
+  CS_CACHE_ = null;   // permessi riletti da zero a ogni controllo
   const problemi = [];
   cfg.calendars.forEach(function (id) {
     const soloOrigine = (cfg.mode === 'oneway' && id === cfg.sourceId);
-    const ammessi = soloOrigine ? ['owner', 'writer', 'reader'] : ['owner', 'writer'];
+    const ammessi = soloOrigine ? ['owner', 'writer', 'reader', 'freeBusyReader'] : ['owner', 'writer'];
     const r = ruolo_(id);
     if (ammessi.indexOf(r) === -1) problemi.push(id + ' (permesso attuale: ' + r + ')');
   });
   if (problemi.length) {
     throw new Error('Permessi insufficienti su: ' + problemi.join('; ') +
-      '. Per il calendario di origine serve almeno "Visualizza tutti i dettagli degli eventi", ' +
-      'per quelli che ricevono i blocchi "Apporta modifiche agli eventi".');
+      '. Per il calendario di origine basta anche solo "libero/occupato"; per quelli che ' +
+      'ricevono i blocchi, e per il doppio senso, serve "Apporta modifiche agli eventi".');
   }
 }
 
 function ruolo_(calId) {
-  try {
-    return Calendar.CalendarList.get(calId).accessRole;
-  } catch (e) {
-    return 'nessun accesso: il calendario e\' nella tua lista?';
+  const c = cacheCs_();
+  if (!c.ruoli) c.ruoli = {};
+  if (!(calId in c.ruoli)) {
+    try {
+      c.ruoli[calId] = Calendar.CalendarList.get(calId).accessRole;
+    } catch (e) {
+      c.ruoli[calId] = 'nessun accesso: il calendario e\' nella tua lista?';
+    }
   }
+  return c.ruoli[calId];
 }
 
 /**

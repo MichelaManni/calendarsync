@@ -35,9 +35,7 @@ function buildHome_(bozza) {
     .setName('home')
     .setHeader(CardService.newCardHeader().setTitle('Calendar Sync'))
     .addSection(sezioneStato_(salvato, lista.tz, nomi))
-    .addSection(sezioneScelta_(cfg,
-      lista.items.filter(function (c) { return c.readable; }),
-      lista.items.filter(function (c) { return !c.readable; })))
+    .addSection(sezioneScelta_(cfg, lista.items))
     .addSection(sezioneOpzioni_(cfg, salvato))
     .addSection(sezionePulsanti_(salvato))
     .build();
@@ -78,7 +76,7 @@ function descrizione_(cfg, nomi) {
   return 'Da ' + nome + ' verso ' + altri + (altri === 1 ? ' calendario.' : ' calendari.');
 }
 
-function sezioneScelta_(cfg, tutti, limitati) {
+function sezioneScelta_(cfg, tutti) {
   const scrivibili = tutti.filter(function (c) { return c.writable; });
   const sezione = CardService.newCardSection();
 
@@ -89,7 +87,7 @@ function sezioneScelta_(cfg, tutti, limitati) {
     .setOnChangeAction(CardService.newAction().setFunctionName('onCambiaOrigine'))
     .addItem('Scegli un calendario', '', !cfg.sourceId);
   tutti.forEach(function (c) {
-    origine.addItem(c.name, c.id, c.id === cfg.sourceId);
+    origine.addItem(c.name + (c.readable ? '' : ' (solo libero/occupato)'), c.id, c.id === cfg.sourceId);
   });
   sezione.addWidget(origine);
 
@@ -110,12 +108,12 @@ function sezioneScelta_(cfg, tutti, limitati) {
     sezione.addWidget(dest);
   }
 
-  if (limitati && limitati.length) {
-    // Calendari visibili in Google Calendar ma condivisi solo come libero/occupato
-    const nomi = limitati.map(function (c) { return escapeHtml_(c.name); }).join(', ');
+  const sorgente = tutti.filter(function (c) { return c.id === cfg.sourceId; })[0];
+  if (sorgente && !sorgente.readable) {
     sezione.addWidget(CardService.newTextParagraph().setText(
-      'Non posso usare <b>' + nomi + '</b>: è condiviso solo come libero/occupato. ' +
-      'Chiedi il permesso “Visualizza tutti i dettagli degli eventi” (o “Apporta modifiche agli eventi”).'));
+      '<b>' + escapeHtml_(sorgente.name) + '</b> è condiviso solo come libero/occupato: ' +
+      'gli orari arrivano come “' + escapeHtml_(cfg.title) + '”, senza nome e senza “Fuori sede”. ' +
+      'Non può ricevere blocchi, quindi non è possibile il doppio senso.'));
   }
 
   sezione.addWidget(CardService.newSelectionInput()
