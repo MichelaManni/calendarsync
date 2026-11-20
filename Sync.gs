@@ -179,14 +179,22 @@ function rispecchia_(srcId, dstId, dati, cfg, stats, deadline) {
   // Eventi reali gia' presenti in destinazione (es. un invito condiviso tra i due
   // calendari): non serve duplicarli con un blocco.
   const giaPresenti = {};
+  const fuoriSedeDst = [];
   dstEvents.forEach(function (ev) {
-    if (!isMirror_(ev)) giaPresenti[chiave_(ev)] = true;
+    if (isMirror_(ev)) return;
+    giaPresenti[chiave_(ev)] = true;
+    if (ev.eventType === 'outOfOffice' && ev.status !== 'cancelled') fuoriSedeDst.push(ev);
   });
 
   // Cosa deve esserci
   const wanted = {};
   srcEvents.forEach(function (ev) {
-    if (devoCopiare_(ev, cfg) && !giaPresenti[chiave_(ev)]) wanted[ev.id] = ev;
+    if (!devoCopiare_(ev, cfg) || giaPresenti[chiave_(ev)]) return;
+    // Se in destinazione c'e' gia' un "Fuori sede" che copre quel periodo non serve
+    // nessun blocco. Vale anche per gli orari dei calendari "libero/occupato", dove
+    // non si puo' sapere se l'impegno di origine era a sua volta un "Fuori sede".
+    if (copertoDa_(ev, fuoriSedeDst)) return;
+    wanted[ev.id] = ev;
   });
 
   // Cosa c'e' gia' (blocchi creati in passato da questa sorgente)
@@ -357,15 +365,17 @@ let CS_CACHE_ = null;   // vale solo per la durata di una esecuzione
 
 function cacheCs_() {
   if (!CS_CACHE_) {
+    let ko = {};
+    try { ko = JSON.parse(PropertiesService.getUserProperties().getProperty('cs_oooKo') || '{}'); } catch (e) { ko = {}; }
     CS_CACHE_ = {
       primaria: {},
-      oooKo: PropertiesService.getUserProperties().getProperty('cs_oooKo') === '1'
+      oooKo: (ko && typeof ko === 'object') ? ko : {}   // calendari su cui Google ha rifiutato il "Fuori sede"
     };
   }
   return CS_CACHE_;
 }
 
-/** Google permette di creare eventi "Fuori sede" solo sul calendario principale. */
+/** Il calendario e' il tuo calendario principale? */
 function primaria_(calId) {
   const c = cacheCs_();
   if (!(calId in c.primaria)) {
@@ -378,24 +388,48 @@ function primaria_(calId) {
   return c.primaria[calId];
 }
 
+/**
+ * Google permette i "Fuori sede" solo sui calendari principali: il tuo, oppure
+ * quello di un altro account condiviso con te (il suo id e' un indirizzo email).
+ * I calendari secondari (...@group.calendar.google.com) non li accettano.
+ */
+function accettaOOO_(calId) {
+  if (primaria_(calId)) return true;
+  return calId.indexOf('@') > 0 && calId.indexOf('#') === -1 && !/calendar\.google\.com$/i.test(calId);
+}
+
 function voglioOOO_(src, dstId) {
   if (src.eventType !== 'outOfOffice' || !(src.start && src.start.dateTime)) return false;
-  if (cacheCs_().oooKo) return false;
-  return primaria_(dstId);
+  if (cacheCs_().oooKo[dstId]) return false;
+  return accettaOOO_(dstId);
+}
+
+/** Il "Fuori sede" ev e' gia' coperto da uno dei "Fuori sede" reali della destinazione? */
+function copertoDa_(ev, fuoriSede) {
+  const s = ms_(ev.start), e = ms_(ev.end);
+  return fuoriSede.some(function (d) {
+    return ms_(d.start) <= s && ms_(d.end) >= e;
+  });
+}
+
+function ms_(t) {
+  if (!t) return NaN;
+  return t.dateTime ? new Date(t.dateTime).getTime() : new Date(t.date).getTime();
 }
 
 /**
- * Crea il blocco. Se Google rifiuta il "Fuori sede" (per esempio perche' il tipo non
- * e' disponibile sul tuo account), ricorda il rifiuto e crea un normale blocco "Occupato".
+ * Crea il blocco. Se Google rifiuta il "Fuori sede" su quel calendario, ricorda il
+ * rifiuto (solo per quel calendario) e crea un normale blocco "Occupato".
  */
 function creaBlocco_(src, srcId, dstId, cfg, body) {
   try {
     retry_(function () { return Calendar.Events.insert(body, dstId, { sendUpdates: 'none' }); });
   } catch (e) {
     if (body.eventType !== 'outOfOffice') throw e;
-    Logger.log('Fuori sede non creabile, uso un blocco normale: ' + e);
-    PropertiesService.getUserProperties().setProperty('cs_oooKo', '1');
-    cacheCs_().oooKo = true;
+    Logger.log('Fuori sede non creabile su ' + dstId + ', uso un blocco normale: ' + e);
+    const c = cacheCs_();
+    c.oooKo[dstId] = true;
+    PropertiesService.getUserProperties().setProperty('cs_oooKo', JSON.stringify(c.oooKo));
     const normale = corpo_(src, srcId, dstId, cfg);
     retry_(function () { return Calendar.Events.insert(normale, dstId, { sendUpdates: 'none' }); });
   }

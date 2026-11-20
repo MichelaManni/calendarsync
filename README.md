@@ -37,7 +37,7 @@ Componente aggiuntivo di Google Calendar (Apps Script) che tiene allineati più 
 ## Limiti da conoscere
 
 - Il controllo automatico gira ogni ora. "Sincronizza ora" aggiorna subito.
-- Gli eventi "Fuori sede" si possono creare solo sul calendario principale: sugli altri calendari diventano blocchi "Occupato".
+- Gli eventi "Fuori sede" si possono creare solo su un calendario principale (il tuo o quello di un altro account condiviso con te): sui calendari secondari diventano blocchi "Occupato". Se nel calendario di destinazione c'è già un "Fuori sede" che copre lo stesso periodo, non viene aggiunto nessun blocco.
 - Un calendario condiviso con te solo come "libero/occupato" può essere usato come **origine**: gli orari arrivano come "Occupato", senza nome né "Fuori sede". Non può ricevere blocchi, quindi con lui non è possibile il doppio senso.
 - Gli eventi "tutto il giorno" non vengono copiati, salvo attivare l'opzione. Google li segna di default come "Libero" e l'opzione "Salta gli eventi segnati come Libero" li esclude.
 - Nei domini Google Workspace l'amministratore può limitare Apps Script o l'accesso di app esterne a Calendar.
